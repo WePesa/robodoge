@@ -9,7 +9,55 @@ import sys
 import auto_merge
 import email
 
-def import_patch(cursor, patch_filename):
+def import_patch_chunks(cursor, commit, patch_chunks):
+  chunks = []
+  add_chunk = ("INSERT INTO patch_chunk "
+    "(btc_commit_id, from_filename, to_filename, body) "
+    "VALUES (%s, %s, %s, %s, %s, %s, %s, %s)")
+  lines = patch_chunks.split('\n')
+  idx = 0
+
+  while idx < len(lines):
+    diff_start = idx
+    diff_match = re.match('diff --git (\S+) (\S+)', lines[idx])
+    if not diff_match:
+      raise Exception('Failed to match first diff line: ' + lines[idx])
+    idx += 1
+    while idx < len(lines) and not lines[idx].find('--- ') == 0:
+      idx += 1
+
+    if idx == len(lines):
+      # New file
+      idx = diff_start + 2
+      from_file = diff_match.group(1)
+      to_file = diff_match.group(2)
+    else:
+      from_file = lines[idx][4:].strip()
+
+      idx += 1
+      if idx == len(lines) or not lines[idx].find('+++ ') == 0:
+        raise Exception('Failed to match +++ diff line: ' + lines[idx])
+      to_file = lines[idx][4:].strip()
+
+    # Strip path identifiers
+    if from_file.find('a/') == 0:
+      from_file = from_file[2:]
+    if to_file.find('b/') == 0:
+      to_file = to_file[2:]
+
+    idx += 1
+
+    while idx < len(lines) and not re.match('diff --git \S+ \S+', lines[idx]):
+      idx += 1
+
+    add_patch = ("INSERT INTO patch_chunk "
+      "(btc_commit_id, from_filename, to_filename, body) "
+      "VALUES (%s, %s, %s, %s)")
+    data_patch = (commit, from_file, to_file, string.join(lines[diff_start: idx - 1], '\n'))
+    cursor.execute(add_patch, data_patch)
+  return
+
+def import_patch(cnx, cursor, patch_filename):
   """
   Import a patch into the database. Takes in a database cursor and name of a file
   to parse.
@@ -36,14 +84,16 @@ def import_patch(cursor, patch_filename):
     subject = string.join(patch_match.group(2).splitlines())
     body = message.get_payload()
     (description, sep, remainder) = body.partition('---')
-    (summary, sep, patch_payload) = remainder.partition('\n\n')
+    (summary, sep, patch_chunks) = remainder.partition('\n\n')
 
     add_patch = ("INSERT INTO patch "
       "(btc_commit_id, batch, batch_sequence, author_name, author_email, subject, descript, raw) "
       "VALUES (%s, %s, %s, %s, %s, %s, %s, %s)")
     data_patch = (commit, 1, sequence, from_name, from_address, subject, description.strip(), message.get_payload())
     cursor.execute(add_patch, data_patch)
-    # TODO: Import individual parts
+    import_patch_chunks(cursor, commit, patch_chunks.strip())
+
+    cnx.commit()
   return
 
 try:
@@ -52,8 +102,7 @@ try:
     cursor = cnx.cursor()
     try:
       for file in os.listdir('patches'):
-        import_patch(cursor, 'patches/' + file)
-      cnx.commit()
+        import_patch(cnx, cursor, 'patches/' + file)
     finally:
       cursor.close()
 
