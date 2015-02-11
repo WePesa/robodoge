@@ -3,3 +3,9 @@ mysql:
   username: dogecoin_merge
   password: test
   db: dogecoin_merge
+dogecoin_repo:
+  path: /home/jrn/dogecoin/.git
+  committer:
+    name: Ross Nicoll
+    email: jrn@jrn.me.uk
+    username: rnicoll
