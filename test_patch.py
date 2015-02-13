@@ -1,8 +1,5 @@
 #!/usr/bin/python3
 
-import re
-import os
-import string
 import sys
 import auto_merge
 import pygit2
