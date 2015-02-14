@@ -47,6 +47,7 @@ def commit_cherrypick(repo, branch, commit, committer):
     tree = repo.TreeBuilder(commit.tree).write()
     parent_oid = None
     branch_ref = repo.lookup_reference('refs/heads/' + branch.branch_name)
+    # Use a loop to pop the first item from the iterator
     for entry in branch_ref.log():
         parent_oid = entry.oid_new
         break
