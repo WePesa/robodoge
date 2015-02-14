@@ -84,10 +84,15 @@ def write_pr(cursor, pr, private_token):
        'title': pr['title'],
        'user_login': pr['user']['login'],
        'body': pr['body'].replace("\r\n", "\n"),
+       'merge_commit_sha': pr['merge_commit_sha'],
        'created_at': datetime.datetime.strptime(pr['created_at'], '%Y-%m-%dT%H:%M:%SZ')
     }
-    cursor.execute("""INSERT INTO pull_request (id, project, url, state, title, user_login, body, created_at)
-         VALUES (%(id)s, %(project)s, %(url)s, %(state)s, %(title)s, %(user_login)s, %(body)s, %(created_at)s);""", data)
+    if pr['merged_at']:
+        data['merged_at'] = datetime.datetime.strptime(pr['merged_at'], '%Y-%m-%dT%H:%M:%SZ')
+    else:
+        data['merged_at'] = None
+    cursor.execute("""INSERT INTO pull_request (id, project, url, state, title, user_login, body, created_at, merged_at, merge_commit_sha)
+         VALUES (%(id)s, %(project)s, %(url)s, %(state)s, %(title)s, %(user_login)s, %(body)s, %(created_at)s, %(merged_at)s, %(merge_commit_sha)s);""", data)
 
     import_commits(cursor, pr['id'], pr['commits_url'], private_token)
     return True
