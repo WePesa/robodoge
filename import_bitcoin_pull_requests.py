@@ -22,7 +22,7 @@ def import_pull_requests(conn, page, private_token):
     # TODO: Handle rate limiting without throwing an exception
 
     response = json.loads(buffer.getvalue().decode('UTF-8'))
-    print('Fetched %d pull requests' % len(response))
+    print('Fetched %d pull requests from https://api.github.com/repos/bitcoin/bitcoin/pulls?state=closed&page=%d' % (len(response), page))
     if len(response) == 0:
         # No more data
         return False
@@ -32,7 +32,6 @@ def import_pull_requests(conn, page, private_token):
         for pr in response:
             write_pr(cursor, pr, private_token)
             conn.commit()
-            time.sleep(1) # Badly rate limit requests
     finally:
         cursor.close()
 
@@ -76,6 +75,10 @@ def write_pr(cursor, pr, private_token):
        print('Pull request %s already imported, skipping' % pr['id'])
        return False
 
+    if not pr['user']:
+       print('Pull request %s has no user, skipping' % pr['id'])
+       return False
+
     data = {
        'id': pr['id'],
        'project': "bitcoin/bitcoin",
@@ -95,6 +98,7 @@ def write_pr(cursor, pr, private_token):
          VALUES (%(id)s, %(project)s, %(url)s, %(state)s, %(title)s, %(user_login)s, %(body)s, %(created_at)s, %(merged_at)s, %(merge_commit_sha)s);""", data)
 
     import_commits(cursor, pr['id'], pr['commits_url'], private_token)
+    time.sleep(1) # Badly rate limit requests
     return True
 
 config = auto_merge.load_configuration('config.yml')
