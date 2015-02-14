@@ -9,3 +9,5 @@ dogecoin_repo:
     name: Ross Nicoll
     email: jrn@jrn.me.uk
     username: rnicoll
+github:
+  private_token: topsecret

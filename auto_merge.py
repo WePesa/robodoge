@@ -1,5 +1,5 @@
 import os.path
-import mysql.connector
+import psycopg2
 import yaml
 
 class ConfigurationException(Exception):
@@ -22,24 +22,16 @@ def load_configuration(filename):
 
   return config
 
-def get_connection(config_filename):
-  config = load_configuration(config_filename)
-  if 'mysql' not in config:
-    raise ConfigurationException("Expected 'mysql' section in configuration file '" + config_filename + "'")
+def get_connection(config):
+  if 'pgsql' not in config:
+    raise ConfigurationException("Expected 'pgsql' section in configuration file '" + config_filename + "'")
   
-  mysql_config = config['mysql']
-  if 'username' not in mysql_config or 'db' not in mysql_config:
-    raise Exception("Expected MySQL username and database name to be provided in configuration file")
+  pgsql_config = config['pgsql']
+  if 'db' not in pgsql_config:
+    raise Exception("Expected PostgreSQL database name to be provided in configuration file")
+  if 'username' not in pgsql_config:
+    raise Exception("Expected PostgreSQL username to be provided in configuration file")
+  if 'password' not in pgsql_config:
+    raise Exception("Expected PostgreSQL password to be provided in configuration file")
 
-  username = mysql_config['username'].strip()
-  if 'password' in mysql_config:
-    password = mysql_config['password'].strip()
-  else:
-    password = ''
-  db = mysql_config['db'].strip()
-  if 'host' in mysql_config:
-    host = mysql_config['host'].strip()
-  else:
-    host = 'localhost'
-
-  return mysql.connector.connect(user=username, password=password, host=host, database=db)
+  return psycopg2.connect("host=localhost dbname=%(db)s user=%(username)s password=%(password)s" % pgsql_config)
