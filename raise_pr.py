@@ -27,28 +27,7 @@ commit = repo.get(commit_oid)
 body = commit.message
 body_lines = body.split('\n')
 title = body_lines[0]
+head = git_username + ':1.9-' + str(commit_oid)
 
-print(title)
-
-request = {
-    'title': title,
-    'body': body,
-    'head': git_username + ':1.9-' + str(commit_oid),
-    'base': '1.9-dev'
-}
-
-buffer = StringIO()
-c = pycurl.Curl()
-c.setopt(c.URL, 'https://api.github.com/repos/dogecoin/dogecoin/pulls')
-c.setopt(c.POST, 1)
-c.setopt(c.POSTFIELDS, json.dumps(request))
-c.setopt(c.HTTPHEADER, ["Content-Type: application/json; charset=utf-8"])
-c.setopt(c.USERNAME, git_username)
-c.setopt(c.PASSWORD, git_password)
-c.setopt(c.WRITEDATA, buffer)
-c.perform()
-c.close()
-
-response = json.load(buffer)
-print('Status: %d' % c.getinfo(c.RESPONSE_CODE))
+response = raise_pr('dogecoin/dogecoin', title, body, head, '1.9-dev', git_username, git_password)
 print('URL: %s' % response['html_url'])

@@ -43,28 +43,6 @@ def attempt_cherrypick_push(repo, base_branch, commit_oid, remote):
         remote.push([branch_ref.name])
         return True
 
-def commit_cherrypick(repo, branch, commit, committer):
-    tree = repo.TreeBuilder(commit.tree).write()
-    parent_oid = None
-    branch_ref = repo.lookup_reference('refs/heads/' + branch.branch_name)
-    # Use a loop to pop the first item from the iterator
-    for entry in branch_ref.log():
-        parent_oid = entry.oid_new
-        break
-
-    if parent_oid:
-        prev_commit = repo.get(parent_oid)
-        parents = [parent_oid]
-    else:
-        parents = []
-
-    repo.create_commit(
-        'refs/heads/' + branch.branch_name,
-        commit.author, committer, commit.message,
-        repo.index.write_tree(),
-        parents
-    )
-
 if len(sys.argv) < 2:
     print('Expected commit ID as sole parameter.')
     sys.exit(1)

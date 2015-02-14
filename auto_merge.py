@@ -1,5 +1,6 @@
 import os.path
 import psycopg2
+import pygit2
 import yaml
 
 class ConfigurationException(Exception):
@@ -7,6 +8,59 @@ class ConfigurationException(Exception):
     self.value = value
   def __str__(self):
     return repr(self.value)
+
+def commit_cherrypick(repo, branch, commit, committer):
+    """
+    Applies a previously cherrypicked commit
+    """
+    tree = repo.TreeBuilder(commit.tree).write()
+    parent_oid = None
+    branch_ref = repo.lookup_reference('refs/heads/' + branch.branch_name)
+    # Use a loop to pop the first item from the iterator
+    for entry in branch_ref.log():
+        parent_oid = entry.oid_new
+        break
+
+    if parent_oid:
+        prev_commit = repo.get(parent_oid)
+        parents = [parent_oid]
+    else:
+        parents = []
+
+    repo.create_commit(
+        'refs/heads/' + branch.branch_name,
+        commit.author, committer, commit.message,
+        repo.index.write_tree(),
+        parents
+    )
+
+def raise_pr(repo_name, title, body, head, base, git_username, git_password):
+    """
+    Raise a pull request against the given GitHub repository
+    """
+    request = {
+        'title': title,
+        'body': body,
+        'head': head,
+        'base': base
+    }
+
+    buffer = StringIO()
+    c = pycurl.Curl()
+    c.setopt(c.URL, 'https://api.github.com/repos/%s/pulls' % repo_name)
+    c.setopt(c.POST, 1)
+    c.setopt(c.POSTFIELDS, json.dumps(request))
+    c.setopt(c.HTTPHEADER, ["Content-Type: application/json; charset=utf-8"])
+    c.setopt(c.USERNAME, git_username)
+    c.setopt(c.PASSWORD, git_password)
+    c.setopt(c.WRITEDATA, buffer)
+    c.perform()
+    status_code = c.getinfo(c.RESPONSE_CODE)
+    c.close()
+
+    if status_code != 200:
+        raise Exception("Returned status from GitHub API was %d, expected  200 (OK)" % status_code)
+    return json.load(buffer)
 
 def load_configuration(filename):
   if not os.path.isfile(filename):
