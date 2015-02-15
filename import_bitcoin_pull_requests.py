@@ -73,6 +73,9 @@ def write_pr(cursor, pr, private_token):
     cursor.execute("SELECT id FROM pull_request WHERE id=%(id)s", {'id': pr['id']})
     if cursor.fetchone():
        print('Pull request %s already imported, skipping' % pr['id'])
+       # Temporary fix for old data
+       cursor.execute('UPDATE pull_request SET html_url=%(html_url)s WHERE id=%(id)s',
+	 {'id': pr['id'], 'html_url': pr['html_url']})
        return False
 
     if not pr['user']:
@@ -83,6 +86,7 @@ def write_pr(cursor, pr, private_token):
        'id': pr['id'],
        'project': "bitcoin/bitcoin",
        'url': pr['url'],
+       'html_url': pr['html_url'],
        'state': pr['state'],
        'title': pr['title'],
        'user_login': pr['user']['login'],
@@ -94,8 +98,12 @@ def write_pr(cursor, pr, private_token):
         data['merged_at'] = datetime.datetime.strptime(pr['merged_at'], '%Y-%m-%dT%H:%M:%SZ')
     else:
         data['merged_at'] = None
-    cursor.execute("""INSERT INTO pull_request (id, project, url, state, title, user_login, body, created_at, merged_at, merge_commit_sha)
-         VALUES (%(id)s, %(project)s, %(url)s, %(state)s, %(title)s, %(user_login)s, %(body)s, %(created_at)s, %(merged_at)s, %(merge_commit_sha)s);""", data)
+    if pr['user']:
+        data['user_login'] = pr['user']['login']
+    else:
+        data['user_login'] = None
+    cursor.execute("""INSERT INTO pull_request (id, project, url, html_url, state, title, user_login, body, created_at, merged_at, merge_commit_sha)
+         VALUES (%(id)s, %(project)s, %(url)s, %(html_url)s, %(state)s, %(title)s, %(user_login)s, %(body)s, %(created_at)s, %(merged_at)s, %(merge_commit_sha)s);""", data)
 
     import_commits(cursor, pr['id'], pr['commits_url'], private_token)
     time.sleep(1) # Badly rate limit requests

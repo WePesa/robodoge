@@ -21,7 +21,7 @@ def create_branch(repo, base_branch, branch_name):
         return None
     
 
-def attempt_merge_pr(conn, repo, pr_id, base_branch, committer, private_token):
+def attempt_merge_pr(conn, repo, pr_id, base_branch, committer, git_username, private_token):
     title = None
     body = None
     merged_commits = []
@@ -80,20 +80,21 @@ def attempt_merge_pr(conn, repo, pr_id, base_branch, committer, private_token):
 
         repo.checkout(safe_branch)
 
-        head = '%s:%s' % ('rnicoll', branch.branch_name) # TODO: Don't hard-code my username
+        head = '%s:%s' % (git_username, branch.branch_name) # TODO: Don't hard-code my username
         base = base_branch.branch_name.split('/')[1]
         print('Raising new pull request')
         new_pr = auto_merge.raise_pr('dogecoin/dogecoin', '[Auto] ' + title, body, head, base, private_token)
 
         cursor.execute(
-            """INSERT INTO pull_request (id, project, url, state, title, user_login, body, created_at) 
-                 VALUES (%(id)s, 'dogecoin', %(url)s, %(state)s, %(title)s, %(user_login)s, %(body)s, NOW())""",
+            """INSERT INTO pull_request (id, project, url, html_url, state, title, user_login, body, created_at) 
+                 VALUES (%(id)s, 'dogecoin', %(url)s, %(html_url)s, %(state)s, %(title)s, %(user_login)s, %(body)s, NOW())""",
             {
                 'id': new_pr['id'],
                 'url': new_pr['url'],
+                'html_url': new_pr['html_url'],
                 'state': new_pr['state'],
                 'title': new_pr['title'],
-                'user_login': 'rnicoll', # TODO: Don't hardcode my username
+                'user_login': git_username,
                 'body': body
 	    }
         )
@@ -142,6 +143,7 @@ if not 'private_token' in config['github']:
     print('Missing "private_token" section in "github" section of configuration')
     sys.exit(1)
 
+git_username = 'rnicoll' # TODO: Don't hardcode
 private_token = config['github']['private_token']
 
 conn = auto_merge.get_connection(config)
@@ -151,14 +153,21 @@ try:
     try:
         # Find pull requests to evaluate
         cursor.execute(
-            """SELECT DISTINCT pr.id 
+            """SELECT pr.id
                 FROM pull_request pr
                     JOIN pull_request_commit commit ON commit.pr_id=pr.id
-                WHERE commit.to_merge='t' AND commit.merged='f'""")
+                WHERE commit.to_merge='t' AND commit.merged='f'
+                ORDER BY pr.merged_at, pr.id ASC""")
+        last_pr = None
         for record in cursor:
-            if attempt_merge_pr(conn, repo, record[0], head_branch, committer, private_token):
+            pr_id = record[0]
+            if last_pr == pr_id:
+                 # We filter after extraction as PostgreSQL doesn't like mixing DISTINCT and ORDER BY
+                 continue
+            last_pr = pr_id
+            if attempt_merge_pr(conn, repo, pr_id, head_branch, committer, git_username, private_token):
                 count += 1
-                if count > 4:
+                if count > 1:
                     break
     finally:
         cursor.close()
