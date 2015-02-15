@@ -4,6 +4,7 @@ import os.path
 import psycopg2
 import pygit2
 import pycurl
+import subprocess
 import yaml
 
 class ConfigurationException(Exception):
@@ -12,22 +13,77 @@ class ConfigurationException(Exception):
   def __str__(self):
     return repr(self.value)
 
-def commit_cherrypick(repo, branch, commit, committer, parent_oid=None):
-    """
-    Applies a previously cherrypicked commit, and returns its new OID
-    """
-    if parent_oid:
-        prev_commit = repo.get(parent_oid)
-        parents = [parent_oid]
-    else:
-        parents = []
+def apply_pull_requests(repo, conn, base_branch, branch, committer, pr_ids):
+    branch_oid = None
+    for entry in repo.lookup_reference('refs/heads/' + branch.branch_name).log():
+        branch_oid = entry.oid_new
+        break
+    parent_oid = branch_oid
+    for pr_id in pr_ids:
+        # Apply commits to PR
+        for commit_oid in get_commit_oids(conn, pr_id):
+            commit = repo.get(commit_oid)
+            repo.cherrypick(commit_oid)
+            if repo.index.conflicts:
+                repo.reset(branch_oid, pygit2.GIT_RESET_HARD)
+                return False
+            if parent_oid:
+                prev_commit = repo.get(parent_oid)
+                parents = [parent_oid]
+            else:
+                parents = []
 
-    return repo.create_commit(
-        'refs/heads/' + branch.branch_name,
-        commit.author, committer, commit.message,
-        repo.index.write_tree(),
-        parents
-    )
+            parent_oid = repo.create_commit(
+                'refs/heads/' + branch.branch_name,
+                commit.author, committer, commit.message,
+                repo.index.write_tree(),
+                parents
+            )
+            repo.lookup_reference('CHERRY_PICK_HEAD').delete()
+    return True
+
+def compile_dogecoin(path):
+    original_path = os.getcwd()
+    os.chdir(path)
+    try:
+        subprocess.check_output([path + os.path.sep + 'autogen.sh'])
+        subprocess.check_output([path + os.path.sep + 'configure'])
+        subprocess.check_output(['make', 'clean'], stderr=subprocess.STDOUT)
+        subprocess.check_output(['make'], stderr=subprocess.STDOUT)
+        subprocess.check_output(['make', 'check'], stderr=subprocess.STDOUT)
+    finally:
+        os.chdir(original_path)
+
+def create_branch(repo, base_branch, branch_name):
+    branch = repo.lookup_branch(branch_name, pygit2.GIT_BRANCH_LOCAL)
+    if not branch:
+        base_branch_ref = repo.lookup_reference('refs/remotes/' + base_branch.branch_name)
+        repo.create_branch(branch_name, base_branch_ref.get_object(), False)
+        branch = repo.lookup_branch(branch_name, pygit2.GIT_BRANCH_LOCAL)
+        return branch
+    else:
+        print('Branch %s already exists, aborting' % branch_name)
+        return None
+
+def get_commit_oids(conn, pr_id):
+    """ Retrieve the commit OIDs for the given pull request """
+    commit_oids = []
+    cursor = conn.cursor()
+    try:
+        cursor.execute(
+        """SELECT commit.sha
+            FROM pull_request pr
+                JOIN pull_request_commit commit ON commit.pr_id=pr.id
+            WHERE pr.id=%(pr_id)s 
+                AND commit.to_merge='t'
+                AND commit.merged='f'
+            ORDER BY commit.ordinality ASC
+        """, {'pr_id': pr_id})
+        for record in cursor:
+            commit_oids.append(pygit2.Oid(hex=record[0]))
+    finally:
+        cursor.close()
+    return commit_oids
 
 def raise_pr(repo_name, title, body, head, base, private_token):
     """

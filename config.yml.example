@@ -4,7 +4,7 @@ pgsql:
   password: test
   db: dogecoin_merge
 dogecoin_repo:
-  path: /home/jrn/dogecoin/.git
+  path: /home/jrn/dogecoin
   branch: upstream/1.9-dev
   committer:
     name: Ross Nicoll

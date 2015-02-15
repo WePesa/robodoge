@@ -1,26 +1,28 @@
 #!/usr/bin/python3
 
-import sys
-import auto_merge
+import os
 import pygit2
+import subprocess
+import sys
 import time
+import auto_merge
 
 # Script to mass evaluate remaining pull requests, and raise them against Dogecoin
 # where feasible.
 
-def create_branch(repo, base_branch, branch_name):
-    branch = repo.lookup_branch(branch_name, pygit2.GIT_BRANCH_LOCAL)
-    if not branch:
-        print('Creating new branch %s' % branch_name)
-        base_branch_ref = repo.lookup_reference('refs/remotes/' + base_branch.branch_name)
-        repo.create_branch(branch_name, base_branch_ref.get_object(), False)
-        branch = repo.lookup_branch(branch_name, pygit2.GIT_BRANCH_LOCAL)
-        return branch
-    else:
-        print('Branch %s already exists, aborting' % branch_name)
-        return None
+def raise_pull_request(repo, conn, base_branch, committer, git_username, private_token, pr_titles, pr_ids):
+    title = '[Auto] Bitcoin PR batch %s' % time.asctime()
+    contents = []
+    for pr_id in pr_ids:
+        contents.append(pr_titles[pr_id])
+    body = "Contains:\n\n" + "\n".join(contents)
 
-def push_branch_and_pr(repo, base_branch, branch, title, body, git_username, private_token):
+    # Create new branch
+    batch_branch = create_branch(repo, base_branch, 'bitcoin-batch-%d' % int(time.time()))
+    repo.checkout(batch_branch)
+    auto_merge.apply_pull_requests(repo, conn, base_branch, batch_branch, committer, pr_ids)
+
+    # Push branch upstream and raise PR
     branch_ref = repo.lookup_reference('refs/heads/' + branch.branch_name)
 
     print('Pushing branch %s to origin' % branch.branch_name)
@@ -28,68 +30,17 @@ def push_branch_and_pr(repo, base_branch, branch, title, body, git_username, pri
     remote.credentials = pygit2.UserPass(private_token, 'x-oauth-basic')
     remote.push([branch_ref.name])
 
+    # Raise a PR from the new branch
     head = '%s:%s' % (git_username, branch.branch_name)
     base = base_branch.branch_name.split('/')[1]
-    print('Raising new pull request')
-    return auto_merge.raise_pr('dogecoin/dogecoin', '[Auto] ' + title, body, head, base, private_token)
-
-def attempt_merge_pr(conn, repo, pr_id, base_branch, committer, git_username, private_token):
-    title = None
-    body = None
-    merged_commits = []
-    
-    # Test if the branch exists already, create it if not
-    branch = create_branch(repo, base_branch, 'bitcoin-pr-%d' % pr_id)
-    if not branch:
-        return False
-
-    repo.checkout(branch)
-
-    # Find the OID of the HEAD commit on the branch for committing against
-    branch_ref = repo.lookup_reference('refs/heads/' + branch.branch_name)
-    branch_oid = None
-    for entry in branch_ref.log():
-        branch_oid = entry.oid_new
-        break
-    parent_oid = branch_oid
-
-    safe_branch = repo.lookup_branch('1.9-dev', pygit2.GIT_BRANCH_LOCAL) # TODO: Don't hardcode safe branch
+    new_pr = auto_merge.raise_pr('dogecoin/dogecoin', title, body, head, base, private_token)
 
     cursor = conn.cursor()
     try:
+        # Mark component PRs done
         cursor.execute(
-            """SELECT pr.title, pr.body, commit.sha
-                FROM pull_request pr
-                    JOIN pull_request_commit commit ON commit.pr_id=pr.id
-                WHERE pr.id=%(pr_id)s 
-                    AND commit.to_merge='t'
-                    AND commit.merged='f'
-                ORDER BY commit.ordinality ASC
-        """, {'pr_id': pr_id})
-        for record in cursor:
-            if not title:
-                title = record[0]
-                body = record[1]
-
-            commit_oid = pygit2.Oid(hex=record[2])
-            print('Cherrypicking commit %s' % commit_oid)
-            repo.cherrypick(commit_oid)
-            if repo.index.conflicts:
-                print('Commit %s cannot be applied cleanly. Reverting to %s' % (commit_oid, branch_oid))
-                repo.reset(branch_oid, pygit2.GIT_RESET_HARD)
-                repo.checkout(safe_branch)
-                branch.delete()
-                return None
-            else:
-                parent_oid = auto_merge.commit_cherrypick(repo, branch, repo.get(commit_oid), committer, parent_oid)
-                repo.lookup_reference('CHERRY_PICK_HEAD').delete()
-
-        new_pr = push_branch_and_pr(repo, base_branch, branch, title, body, git_username, private_token)
-        repo.checkout(safe_branch)
-
-        cursor.execute(
-            """INSERT INTO pull_request (id, project, url, html_url, state, title, user_login, body, created_at) 
-                 VALUES (%(id)s, 'dogecoin', %(url)s, %(html_url)s, %(state)s, %(title)s, %(user_login)s, %(body)s, NOW())""",
+            """INSERT INTO pull_request (id, project, url, html_url, state, title, user_login, body, created_at)
+                    VALUES (%(id)s, 'dogecoin', %(url)s, %(html_url)s, %(state)s, %(title)s, %(user_login)s, %(body)s, NOW())""",
             {
                 'id': new_pr['id'],
                 'url': new_pr['url'],
@@ -97,20 +48,45 @@ def attempt_merge_pr(conn, repo, pr_id, base_branch, committer, git_username, pr
                 'state': new_pr['state'],
                 'title': new_pr['title'],
                 'user_login': git_username,
-                'body': body
-	    }
+                'body': new_pr['body']
+            }
         )
-        cursor.execute("UPDATE pull_request_commit SET merged='t', raised_pr_id=%(raised_pr)s WHERE pr_id=%(pr_id)s", {
-            'pr_id': pr_id,
-            'raised_pr': new_pr['id']
-        })
+
+        for pr_id in viable_pr_ids:
+            cursor.execute("UPDATE pull_request_commit SET merged='t', raised_pr_id=%(raised_pr)s WHERE pr_id=%(pr_id)s", {
+                'pr_id': pr_id,
+                'raised_pr': new_pr['id']
+            })
         conn.commit()
     finally:
         cursor.close()
 
-    print('Raised new PR %s' % new_pr['html_url'])
+def test_pr_merge(conn, path, repo, pr_id, safe_branch, base_branch, committer):
+    """
+    Test if a pull request can be cleanly merged against the current development branch. Returns true/false
+    """
 
-    return new_pr
+    # Test if the branch exists already, create it if not
+    head_branch = auto_merge.create_branch(repo, base_branch, 'bitcoin-pr-%d' % pr_id)
+    if not head_branch:
+        return False
+    try:
+        repo.checkout(head_branch)
+
+        if not auto_merge.apply_pull_requests(repo, conn, base_branch, head_branch, committer, [pr_id]):
+            return False
+
+        # Make sure it's a viable build too
+        print('Attempting compilation of PR %d' % pr_id)
+        try:
+            auto_merge.compile_dogecoin(path)
+        except subprocess.CalledProcessError:
+            return False
+    finally:
+        repo.checkout(safe_branch)
+        head_branch.delete()
+
+    return True
 
 config = auto_merge.load_configuration('config.yml')
 
@@ -129,10 +105,10 @@ if not 'path' in config['dogecoin_repo']:
     sys.exit(1)
 
 committer = pygit2.Signature(config['dogecoin_repo']['committer']['name'], config['dogecoin_repo']['committer']['email'])
-repo = pygit2.Repository(config['dogecoin_repo']['path'])
-head_branch = repo.lookup_branch(config['dogecoin_repo']['branch'], pygit2.GIT_BRANCH_REMOTE)
+repo = pygit2.Repository(config['dogecoin_repo']['path'] + os.path.sep + '.git')
+base_branch = repo.lookup_branch(config['dogecoin_repo']['branch'], pygit2.GIT_BRANCH_REMOTE)
 
-if not head_branch:
+if not base_branch:
     print('Could not find upstream branch %s' % config['dogecoin_repo']['branch'])
     sys.exit(1)
 
@@ -145,29 +121,42 @@ if not 'private_token' in config['github']:
     print('Missing "private_token" section in "github" section of configuration')
     sys.exit(1)
 
-git_username = 'rnicoll' # TODO: Don't hardcode
+git_username = 'rnicoll' # FIXME: Don't hardcode
 private_token = config['github']['private_token']
+safe_branch = repo.lookup_branch('1.9-dev', pygit2.GIT_BRANCH_LOCAL) # FIXME: Don't hardcode
 
 conn = auto_merge.get_connection(config)
 try:
+    pr_titles = {}
+    ordered_pr_ids = []
     cursor = conn.cursor()
     try:
         # Find pull requests to evaluate
         cursor.execute(
-            """SELECT pr.id
+            """SELECT pr.id, pr.title
                 FROM pull_request pr
                     JOIN pull_request_commit commit ON commit.pr_id=pr.id
                 WHERE commit.to_merge='t' AND commit.merged='f'
                 ORDER BY pr.merged_at, pr.id ASC""")
-        last_pr = None
         for record in cursor:
             pr_id = record[0]
-            if last_pr == pr_id:
-                 # We filter after extraction as PostgreSQL doesn't like mixing DISTINCT and ORDER BY
-                 continue
-            last_pr = pr_id
-            attempt_merge_pr(conn, repo, pr_id, head_branch, committer, git_username, private_token)
+            if pr_id not in ordered_pr_ids:
+                ordered_pr_ids.append(pr_id)
+                pr_titles[pr_id] = record[1]
     finally:
         cursor.close()
+
+    viable_pr_ids = []
+    for pr_id in ordered_pr_ids:
+        if test_pr_merge(conn, config['dogecoin_repo']['path'], repo, pr_id, safe_branch, base_branch, committer):
+            viable_pr_ids.append(pr_id)
+        if len(viable_pr_ids) == 4:
+            raise_pull_request(repo, conn, base_branch, committer, git_username, private_token, pr_titles, pr_ids)
+            viable_pr_ids = []
+
+    if len(viable_pr_ids) > 0:
+        raise_pull_request(repo, conn, base_branch, committer, git_username, private_token, pr_titles, pr_ids)
 finally:
     conn.close()
+
+repo.checkout(safe_branch)
