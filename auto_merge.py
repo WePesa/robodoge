@@ -9,25 +9,17 @@ class ConfigurationException(Exception):
   def __str__(self):
     return repr(self.value)
 
-def commit_cherrypick(repo, branch, commit, committer):
+def commit_cherrypick(repo, branch, commit, committer, parent_oid=None):
     """
-    Applies a previously cherrypicked commit
+    Applies a previously cherrypicked commit, and returns its new OID
     """
-    tree = repo.TreeBuilder(commit.tree).write()
-    parent_oid = None
-    branch_ref = repo.lookup_reference('refs/heads/' + branch.branch_name)
-    # Use a loop to pop the first item from the iterator
-    for entry in branch_ref.log():
-        parent_oid = entry.oid_new
-        break
-
     if parent_oid:
         prev_commit = repo.get(parent_oid)
         parents = [parent_oid]
     else:
         parents = []
 
-    repo.create_commit(
+    return repo.create_commit(
         'refs/heads/' + branch.branch_name,
         commit.author, committer, commit.message,
         repo.index.write_tree(),

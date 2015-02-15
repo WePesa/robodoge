@@ -1,13 +1,13 @@
-mysql:
+pgsql:
   host: localhost
   username: dogecoin_merge
   password: test
   db: dogecoin_merge
 dogecoin_repo:
   path: /home/jrn/dogecoin/.git
+  branch: upstream/1.9-dev
   committer:
     name: Ross Nicoll
     email: jrn@jrn.me.uk
-    username: rnicoll
 github:
   private_token: topsecret
