@@ -19,7 +19,19 @@ def create_branch(repo, base_branch, branch_name):
     else:
         print('Branch %s already exists, aborting' % branch_name)
         return None
-    
+
+def push_branch_and_pr(repo, base_branch, branch, title, body, git_username, private_token):
+    branch_ref = repo.lookup_reference('refs/heads/' + branch.branch_name)
+
+    print('Pushing branch %s to origin' % branch.branch_name)
+    remote = repo.remotes["origin"]
+    remote.credentials = pygit2.UserPass(private_token, 'x-oauth-basic')
+    remote.push([branch_ref.name])
+
+    head = '%s:%s' % (git_username, branch.branch_name)
+    base = base_branch.branch_name.split('/')[1]
+    print('Raising new pull request')
+    return auto_merge.raise_pr('dogecoin/dogecoin', '[Auto] ' + title, body, head, base, private_token)
 
 def attempt_merge_pr(conn, repo, pr_id, base_branch, committer, git_username, private_token):
     title = None
@@ -70,20 +82,10 @@ def attempt_merge_pr(conn, repo, pr_id, base_branch, committer, git_username, pr
                 return None
             else:
                 parent_oid = auto_merge.commit_cherrypick(repo, branch, repo.get(commit_oid), committer, parent_oid)
-                cherrypick_ref = repo.lookup_reference('CHERRY_PICK_HEAD')
-                cherrypick_ref.delete()
+                repo.lookup_reference('CHERRY_PICK_HEAD').delete()
 
-        print('Pushing branch %s to origin' % branch.branch_name)
-        remote = repo.remotes["origin"]
-        remote.credentials = pygit2.UserPass(private_token, 'x-oauth-basic')
-        remote.push([branch_ref.name])
-
+        new_pr = push_branch_and_pr(repo, base_branch, branch, title, body, git_username, private_token)
         repo.checkout(safe_branch)
-
-        head = '%s:%s' % (git_username, branch.branch_name) # TODO: Don't hard-code my username
-        base = base_branch.branch_name.split('/')[1]
-        print('Raising new pull request')
-        new_pr = auto_merge.raise_pr('dogecoin/dogecoin', '[Auto] ' + title, body, head, base, private_token)
 
         cursor.execute(
             """INSERT INTO pull_request (id, project, url, html_url, state, title, user_login, body, created_at) 
@@ -149,7 +151,6 @@ private_token = config['github']['private_token']
 conn = auto_merge.get_connection(config)
 try:
     cursor = conn.cursor()
-    count = 0
     try:
         # Find pull requests to evaluate
         cursor.execute(
@@ -165,10 +166,7 @@ try:
                  # We filter after extraction as PostgreSQL doesn't like mixing DISTINCT and ORDER BY
                  continue
             last_pr = pr_id
-            if attempt_merge_pr(conn, repo, pr_id, head_branch, committer, git_username, private_token):
-                count += 1
-                if count > 1:
-                    break
+            attempt_merge_pr(conn, repo, pr_id, head_branch, committer, git_username, private_token)
     finally:
         cursor.close()
 finally:
