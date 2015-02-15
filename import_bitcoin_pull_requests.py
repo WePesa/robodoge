@@ -73,9 +73,6 @@ def write_pr(cursor, pr, private_token):
     cursor.execute("SELECT id FROM pull_request WHERE id=%(id)s", {'id': pr['id']})
     if cursor.fetchone():
        print('Pull request %s already imported, skipping' % pr['id'])
-       # Temporary fix for old data
-       cursor.execute('UPDATE pull_request SET html_url=%(html_url)s WHERE id=%(id)s',
-	 {'id': pr['id'], 'html_url': pr['html_url']})
        return False
 
     if not pr['user']:
