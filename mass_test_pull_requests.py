@@ -21,7 +21,7 @@ def create_branch(repo, base_branch, branch_name):
         return None
     
 
-def attempt_merge_pr(conn, repo, pr_id, base_branch, committer, git_username, git_password):
+def attempt_merge_pr(conn, repo, pr_id, base_branch, committer, private_token):
     title = None
     body = None
     merged_commits = []
@@ -29,7 +29,6 @@ def attempt_merge_pr(conn, repo, pr_id, base_branch, committer, git_username, gi
     # Test if the branch exists already, create it if not
     branch = create_branch(repo, base_branch, 'bitcoin-pr-%d' % pr_id)
     if not branch:
-        print('Branch %s already exists, aborting' % branch_name)
         return False
 
     repo.checkout(branch)
@@ -41,6 +40,8 @@ def attempt_merge_pr(conn, repo, pr_id, base_branch, committer, git_username, gi
         branch_oid = entry.oid_new
         break
     parent_oid = branch_oid
+
+    safe_branch = repo.lookup_branch('1.9-dev', pygit2.GIT_BRANCH_LOCAL) # TODO: Don't hardcode safe branch
 
     cursor = conn.cursor()
     try:
@@ -64,29 +65,42 @@ def attempt_merge_pr(conn, repo, pr_id, base_branch, committer, git_username, gi
             if repo.index.conflicts:
                 print('Commit %s cannot be applied cleanly. Reverting to %s' % (commit_oid, branch_oid))
                 repo.reset(branch_oid, pygit2.GIT_RESET_HARD)
-                repo.checkout(repo.lookup_branch('refs/heads/1.9-dev')) # TODO: Don't hardcode safe branch
+                repo.checkout(safe_branch)
                 branch.delete()
                 return None
             else:
-                # TODO: Use previous cherrypick as base, not just the branch
-                parent_oid = commit_cherrypick(repo, branch, repo.get(commit_oid), committer, parent_oid)
+                parent_oid = auto_merge.commit_cherrypick(repo, branch, repo.get(commit_oid), committer, parent_oid)
                 cherrypick_ref = repo.lookup_reference('CHERRY_PICK_HEAD')
                 cherrypick_ref.delete()
 
         print('Pushing branch %s to origin' % branch.branch_name)
         remote = repo.remotes["origin"]
-        remote.credentials = pygit2.UserPass(git_username, git_password)
+        remote.credentials = pygit2.UserPass(private_token, 'x-oauth-basic')
         remote.push([branch_ref.name])
 
-        repo.checkout(repo.lookup_branch('refs/heads/1.9-dev')) # TODO: Don't hardcode safe branch
-        branch.delete()
+        repo.checkout(safe_branch)
 
-        head = '%s:%s' % (git_username, branch_name)
+        head = '%s:%s' % ('rnicoll', branch.branch_name) # TODO: Don't hard-code my username
+        base = base_branch.branch_name.split('/')[1]
         print('Raising new pull request')
-        new_pr = raise_pr('dogecoin/dogecoin', title, body, head, branch.branch_name, git_username, git_password)
+        new_pr = auto_merge.raise_pr('dogecoin/dogecoin', '[Auto] ' + title, body, head, base, private_token)
 
-        cursor.execute("UPDATE pull_request_commit SET merged='t' WHERE pr_id=%(pr_id)s", {'pr_id': pr_id})
-        # TODO: Note the new PR ID
+        cursor.execute(
+            """INSERT INTO pull_request (id, project, url, state, title, user_login, body, created_at) 
+                 VALUES (%(id)s, 'dogecoin', %(url)s, %(state)s, %(title)s, %(user_login)s, %(body)s, NOW())""",
+            {
+                'id': new_pr['id'],
+                'url': new_pr['url'],
+                'state': new_pr['state'],
+                'title': new_pr['title'],
+                'user_login': 'rnicoll', # TODO: Don't hardcode my username
+                'body': body
+	    }
+        )
+        cursor.execute("UPDATE pull_request_commit SET merged='t', raised_pr_id=%(raised_pr)s WHERE pr_id=%(pr_id)s", {
+            'pr_id': pr_id,
+            'raised_pr': new_pr['id']
+        })
         conn.commit()
     finally:
         cursor.close()
@@ -128,12 +142,12 @@ if not 'private_token' in config['github']:
     print('Missing "private_token" section in "github" section of configuration')
     sys.exit(1)
 
-git_username = config['github']['private_token']
-git_password = 'x-oauth-basic'
+private_token = config['github']['private_token']
 
 conn = auto_merge.get_connection(config)
 try:
     cursor = conn.cursor()
+    count = 0
     try:
         # Find pull requests to evaluate
         cursor.execute(
@@ -142,8 +156,10 @@ try:
                     JOIN pull_request_commit commit ON commit.pr_id=pr.id
                 WHERE commit.to_merge='t' AND commit.merged='f'""")
         for record in cursor:
-            attempt_merge_pr(conn, repo, record[0], head_branch, committer, git_username, git_password)
-            break
+            if attempt_merge_pr(conn, repo, record[0], head_branch, committer, private_token):
+                count += 1
+                if count > 4:
+                    break
     finally:
         cursor.close()
 finally:

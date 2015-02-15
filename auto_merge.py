@@ -1,6 +1,9 @@
+from io import BytesIO
+import json
 import os.path
 import psycopg2
 import pygit2
+import pycurl
 import yaml
 
 class ConfigurationException(Exception):
@@ -26,7 +29,7 @@ def commit_cherrypick(repo, branch, commit, committer, parent_oid=None):
         parents
     )
 
-def raise_pr(repo_name, title, body, head, base, git_username, git_password):
+def raise_pr(repo_name, title, body, head, base, private_token):
     """
     Raise a pull request against the given GitHub repository
     """
@@ -37,22 +40,23 @@ def raise_pr(repo_name, title, body, head, base, git_username, git_password):
         'base': base
     }
 
-    buffer = StringIO()
+    buffer = BytesIO()
     c = pycurl.Curl()
     c.setopt(c.URL, 'https://api.github.com/repos/%s/pulls' % repo_name)
     c.setopt(c.POST, 1)
     c.setopt(c.POSTFIELDS, json.dumps(request))
     c.setopt(c.HTTPHEADER, ["Content-Type: application/json; charset=utf-8"])
-    c.setopt(c.USERNAME, git_username)
-    c.setopt(c.PASSWORD, git_password)
+    c.setopt(c.USERNAME, private_token)
+    c.setopt(c.PASSWORD, 'x-oauth-basic')
     c.setopt(c.WRITEDATA, buffer)
     c.perform()
     status_code = c.getinfo(c.RESPONSE_CODE)
     c.close()
 
-    if status_code != 200:
-        raise Exception("Returned status from GitHub API was %d, expected  200 (OK)" % status_code)
-    return json.load(buffer)
+    if status_code != 201:
+        print(buffer.getvalue().decode('UTF-8'))
+        raise Exception("Returned status from GitHub API was %d, expected 201 (Created)" % status_code)
+    return json.loads(buffer.getvalue().decode('UTF-8'))
 
 def load_configuration(filename):
   if not os.path.isfile(filename):
