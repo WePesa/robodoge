@@ -15,23 +15,23 @@ def raise_pull_request(repo, conn, base_branch, committer, git_username, private
     contents = []
     for pr_id in pr_ids:
         contents.append(pr_titles[pr_id])
-    body = "Contains:\n\n" + "\n".join(contents)
+    body = "Contains:\n\n* " + "\n* ".join(contents)
 
     # Create new branch
-    batch_branch = create_branch(repo, base_branch, 'bitcoin-batch-%d' % int(time.time()))
+    batch_branch = auto_merge.create_branch(repo, base_branch, 'bitcoin-batch-%d' % int(time.time()))
     repo.checkout(batch_branch)
     auto_merge.apply_pull_requests(repo, conn, base_branch, batch_branch, committer, pr_ids)
 
     # Push branch upstream and raise PR
-    branch_ref = repo.lookup_reference('refs/heads/' + branch.branch_name)
+    branch_ref = repo.lookup_reference('refs/heads/' + batch_branch.branch_name)
 
-    print('Pushing branch %s to origin' % branch.branch_name)
+    print('Pushing branch %s to origin' % batch_branch.branch_name)
     remote = repo.remotes["origin"]
     remote.credentials = pygit2.UserPass(private_token, 'x-oauth-basic')
     remote.push([branch_ref.name])
 
     # Raise a PR from the new branch
-    head = '%s:%s' % (git_username, branch.branch_name)
+    head = '%s:%s' % (git_username, batch_branch.branch_name)
     base = base_branch.branch_name.split('/')[1]
     new_pr = auto_merge.raise_pr('dogecoin/dogecoin', title, body, head, base, private_token)
 
@@ -151,12 +151,12 @@ try:
         if test_pr_merge(conn, config['dogecoin_repo']['path'], repo, pr_id, safe_branch, base_branch, committer):
             viable_pr_ids.append(pr_id)
         if len(viable_pr_ids) == 4:
-            raise_pull_request(repo, conn, base_branch, committer, git_username, private_token, pr_titles, pr_ids)
+            raise_pull_request(repo, conn, base_branch, committer, git_username, private_token, pr_titles, viable_pr_ids)
             viable_pr_ids = []
-            break # TODO: Remove once testing is complete
+            time.sleep(60*60) # Give the server a break
 
     if len(viable_pr_ids) > 0:
-        raise_pull_request(repo, conn, base_branch, committer, git_username, private_token, pr_titles, pr_ids)
+        raise_pull_request(repo, conn, base_branch, committer, git_username, private_token, pr_titles, viable_pr_ids)
 finally:
     conn.close()
 
