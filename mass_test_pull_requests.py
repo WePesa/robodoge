@@ -84,7 +84,7 @@ def test_pr_merge(conn, path, repo, pr_id, safe_branch, base_branch, committer):
             return False
     finally:
         repo.checkout(safe_branch)
-        head_branch.delete()
+        repo.lookup_branch(head_branch.branch_name, pygit2.GIT_BRANCH_LOCAL).delete()
 
     return True
 
@@ -153,6 +153,7 @@ try:
         if len(viable_pr_ids) == 4:
             raise_pull_request(repo, conn, base_branch, committer, git_username, private_token, pr_titles, pr_ids)
             viable_pr_ids = []
+            break # TODO: Remove once testing is complete
 
     if len(viable_pr_ids) > 0:
         raise_pull_request(repo, conn, base_branch, committer, git_username, private_token, pr_titles, pr_ids)
