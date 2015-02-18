@@ -35,7 +35,7 @@ def mark_commits_merged(conn, merger, new_pr, pr_ids):
 def raise_pull_request(conn, merger, pr_titles, pr_ids):
     repo = merger.repo
     title = '[Auto] Bitcoin PR batch %s' % time.asctime()
-    contents = build_pr_body(pr_titles, pr_ids)
+    body = build_pr_body(pr_titles, pr_ids)
 
     # Create new branch
     branch_name = 'bitcoin-batch-%d' % int(time.time())
@@ -119,7 +119,7 @@ try:
             viable_pr_ids.append(pr_id)
         if len(viable_pr_ids) == 4:
             try:
-                raise_pull_request(repo, conn, base_branch, committer, git_username, private_token, pr_titles, viable_pr_ids)
+                raise_pull_request(conn, merger, pr_titles, viable_pr_ids)
             except auto_merge.BranchCollisionError as err:
                 print(err.msg)
             viable_pr_ids = []
@@ -127,7 +127,7 @@ try:
 
     if len(viable_pr_ids) > 0:
         try:
-            raise_pull_request(repo, conn, base_branch, committer, git_username, private_token, pr_titles, viable_pr_ids)
+            raise_pull_request(conn, merger, pr_titles, viable_pr_ids)
         except auto_merge.BranchCollisionError as err:
             print(err.msg)
 finally:

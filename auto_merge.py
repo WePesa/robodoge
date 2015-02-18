@@ -22,17 +22,17 @@ class BuildError(Error):
     """Base class for build errors in this module."""
     pass
 
-class BuildMakeError(Error):
+class BuildMakeError(BuildError):
     """Build error while actually compiling """
     def __init__(self, cause):
         self.cause = cause
 
-class BuildSetupError(Error):
+class BuildSetupError(BuildError):
     """Build error while configuring the build"""
     def __init__(self, cause):
         self.cause = cause
 
-class BuildTestError(Error):
+class BuildTestError(BuildError):
     """Build error in unit test execution"""
     def __init__(self, cause):
         self.cause = cause
