@@ -5,7 +5,7 @@ import pygit2
 import subprocess
 import sys
 import time
-import auto_merge
+import robodoge
 
 # Script to mass evaluate remaining pull requests, and raise them against Dogecoin
 # where feasible.
@@ -20,7 +20,7 @@ def mark_commits_merged(conn, merger, new_pr, pr_ids):
     cursor = conn.cursor()
     try:
         # Mark the new PR to the database
-        auto_merge.write_pr(cursor, new_pr, 'dogecoin/dogecoin')
+        robodoge.write_pr(cursor, new_pr, 'dogecoin/dogecoin')
 
         # Mark component PRs done
         for pr_id in pr_ids:
@@ -76,8 +76,8 @@ def test_pr_merge(conn, merger, pr_id):
         # Make sure it's a viable build too
         print('Attempting compilation of PR %d' % pr_id)
         try:
-            auto_merge.compile_dogecoin(path)
-        except auto_merge.BuildError:
+            robodoge.compile_dogecoin(path)
+        except robodoge.BuildError:
             return False
     finally:
         repo.checkout(merger.safe_branch)
@@ -85,10 +85,10 @@ def test_pr_merge(conn, merger, pr_id):
 
     return True
 
-config = auto_merge.load_configuration('config.yml')
+config = robodoge.load_configuration('config.yml')
 try:
-    merger = auto_merge.Robodoge(config)
-except auto_merge.ConfigurationError as err:
+    merger = robodoge.Robodoge(config)
+except robodoge.ConfigurationError as err:
     print(err.msg)
     sys.exit(1)
 
@@ -120,7 +120,7 @@ try:
         if len(viable_pr_ids) == 4:
             try:
                 raise_pull_request(conn, merger, pr_titles, viable_pr_ids)
-            except auto_merge.BranchCollisionError as err:
+            except robodoge.BranchCollisionError as err:
                 print(err.msg)
             viable_pr_ids = []
             time.sleep(60*60) # Give the server a break
@@ -128,7 +128,7 @@ try:
     if len(viable_pr_ids) > 0:
         try:
             raise_pull_request(conn, merger, pr_titles, viable_pr_ids)
-        except auto_merge.BranchCollisionError as err:
+        except robodoge.BranchCollisionError as err:
             print(err.msg)
 finally:
     conn.close()

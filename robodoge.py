@@ -70,7 +70,7 @@ class Robodoge:
         self.git_username = 'rnicoll' # FIXME: Don't hardcode
         self.private_token = config['github']['private_token']
         self.safe_branch = self.repo.lookup_branch('1.9-dev', pygit2.GIT_BRANCH_LOCAL) # FIXME: Don't hardcode
-    
+
     def apply_pull_requests(self, conn, head_branch, pr_ids):
         """
         Apply one or more pull requests to a branch.

@@ -1,6 +1,6 @@
 import psycopg2
 from io import BytesIO
-import auto_merge
+import robodoge
 import sys
 
 def mark_commit_to_be_merged(cursor, commit_id):
@@ -18,8 +18,8 @@ if len(sys.argv) < 2:
     sys.exit(1)
 commit_filename = sys.argv[1].strip()
 
-config = auto_merge.load_configuration('config.yml')
-conn = auto_merge.get_connection(config)
+config = robodoge.load_configuration('config.yml')
+conn = robodoge.get_connection(config)
 try:
     cursor = conn.cursor()
     try:

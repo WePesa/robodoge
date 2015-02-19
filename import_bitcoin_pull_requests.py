@@ -2,7 +2,7 @@ import psycopg2
 import pycurl
 import json
 from io import BytesIO
-import auto_merge
+import robodoge
 import datetime
 import time
 
@@ -75,13 +75,13 @@ def write_pr(cursor, pr, private_token):
        print('Pull request %s already imported, skipping' % pr['id'])
        return False
 
-    auto_merge.write_pr(cursor, pr, 'bitcoin/bitcoin')
+    robodoge.write_pr(cursor, pr, 'bitcoin/bitcoin')
 
     import_commits(cursor, pr['id'], pr['commits_url'], private_token)
     time.sleep(1) # Badly rate limit requests
     return True
 
-config = auto_merge.load_configuration('config.yml')
+config = robodoge.load_configuration('config.yml')
 if not 'github' in config:
     print('Expected "github" section in configuration')
     sys.exit(1)
@@ -90,7 +90,7 @@ if not 'private_token' in github_config:
     print('Expected "private_token" in Github section of configuration')
     sys.exit(1)
 
-conn = auto_merge.get_connection(config)
+conn = robodoge.get_connection(config)
 try:
     page = 1
     while import_pull_requests(conn, page, github_config['private_token']):
