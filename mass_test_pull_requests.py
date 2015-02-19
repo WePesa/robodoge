@@ -87,7 +87,7 @@ def test_pr_merge(conn, merger, pr_id):
 
 config = auto_merge.load_configuration('config.yml')
 try:
-    merger = auto_merge.AutoMerge(config)
+    merger = auto_merge.Robodoge(config)
 except auto_merge.ConfigurationError as err:
     print(err.msg)
     sys.exit(1)

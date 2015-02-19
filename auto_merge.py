@@ -44,7 +44,7 @@ class ConfigurationError(Error):
     def __str__(self):
         return repr(self.msg)
 
-class AutoMerge:
+class Robodoge:
     def __init__(self, config):
         if not 'dogecoin_repo' in config:
             raise ConfigurationError('Missing "dogecoin_repo" section from configuration')
