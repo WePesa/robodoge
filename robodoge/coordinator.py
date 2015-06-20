@@ -18,7 +18,7 @@ def get_prs():
     try:
         cursor = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
         try:
-            cursor.execute("""SELECT id,url,state,title,user_login,html_url,assignee_login,milestone_title,base_ref, build_node, s3_arn, test_node
+            cursor.execute("""SELECT id, number, url,state,title,user_login,html_url,assignee_login,milestone_title,base_ref, build_node, s3_arn, test_node
                               FROM pull_request
                               WHERE project='dogecoin/dogecoin' and state!='closed'
                               ORDER BY id ASC""")
@@ -34,7 +34,7 @@ def get_buildable_prs():
     try:
         cursor = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
         try:
-            cursor.execute("""SELECT id,url,state,title,user_login,html_url,assignee_login,milestone_title,base_ref, build_node, s3_arn, test_node
+            cursor.execute("""SELECT id, number, url,state,title,user_login,html_url,assignee_login,milestone_title,base_ref, build_node, s3_arn, test_node
                               FROM pull_request
                               WHERE project='dogecoin/dogecoin' and state='open' and assignee_login is null and milestone_title='1.9' and base_ref='1.9-dev' and build_node IS NULL
                               ORDER BY id ASC""")
@@ -50,7 +50,7 @@ def get_pr(pr_id):
     try:
         cursor = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
         try:
-            cursor.execute("""SELECT id,url,state,title,user_login,html_url,assignee_login,milestone_title,base_ref, build_node, s3_arn, test_node
+            cursor.execute("""SELECT id, number, url,state,title,user_login,html_url,assignee_login,milestone_title,base_ref, build_node, s3_arn, test_node
                               FROM pull_request
                               WHERE id=%(id)s""", {'id': pr_id})
             return jsonify({'prs': cursor.fetchall()})

@@ -239,6 +239,7 @@ def extract_pr_data(pr, project):
     """ Extract data from a pull request for insertion/update into the database """
     data = {
        'id': pr['id'],
+       'number': pr['number'],
        'project': project,
        'url': pr['url'],
        'html_url': pr['html_url'],
@@ -272,8 +273,8 @@ def insert_pr(cursor, pr, project):
     """ Insert a pull request into the database """
     data = extract_pr_data(pr, project)
     cursor.execute("""INSERT INTO pull_request
-         (id, project, url, html_url, state, title, user_login, assignee_login, milestone_title, base_ref, body, created_at, merged_at, merge_commit_sha)
-         VALUES (%(id)s, %(project)s, %(url)s, %(html_url)s, %(state)s, %(title)s, %(user_login)s, %(assignee_login)s, %(milestone_title)s, %(base_ref)s, %(body)s, %(created_at)s, %(merged_at)s, %(merge_commit_sha)s);""", data)
+         (id, number, project, url, html_url, state, title, user_login, assignee_login, milestone_title, base_ref, body, created_at, merged_at, merge_commit_sha)
+         VALUES (%(id)s, %(number)s, %(project)s, %(url)s, %(html_url)s, %(state)s, %(title)s, %(user_login)s, %(assignee_login)s, %(milestone_title)s, %(base_ref)s, %(body)s, %(created_at)s, %(merged_at)s, %(merge_commit_sha)s);""", data)
 
 def update_pr(cursor, pr, project):
     """ Update a pull request which already exists in the database """

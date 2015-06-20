@@ -1,5 +1,6 @@
 CREATE TABLE pull_request (
     id INTEGER NOT NULL,
+    number INTEGER NOT NULL,
     project VARCHAR(24) NOT NULL,
     url VARCHAR(80) NOT NULL,
     html_url VARCHAR(80) NOT NULL,
