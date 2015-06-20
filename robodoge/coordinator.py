@@ -1,5 +1,5 @@
 #!/usr/bin/python3
-from flask import Flask, jsonify, request, make_response
+from flask import Flask, jsonify, request, make_response, abort
 import psycopg2
 import psycopg2.extras
 from . import *
@@ -61,31 +61,47 @@ def get_pr(pr_id):
 
 @app.route('/automerge/api/v1.0/pr/<int:pr_id>', methods=['POST'])
 def update_pr(pr_id):
+    pr_url = None
     conn = merger.get_connection()
     try:
         cursor = conn.cursor()
         try:
-            cursor.execute("""SELECT id
+            cursor.execute("""SELECT url
                               FROM pull_request
                               WHERE id=%(id)s""", {'id': pr_id})
-            if not cursor.fetchone():
+            row = cursor.fetchone()
+            if not row:
                 abort(404)
+            else:
+                pr_url = row[0].replace('pulls', 'issues')
         finally:
             cursor.close()
 
         if not request.json or not 'operation' in request.json:
-            abort(403)
+            return jsonify({'result': 'No operation specified'})
 
         if request.json['operation'] == 'claim_build':
-            return claim_pr(pr_id, request.remote_addr)
+            return claim_pr(conn, pr_id, pr_url, 'rnicoll', request.remote_addr)
         else:
-            abort(403)
+            return jsonify({'result': 'Invalid operation specified'})
     finally:
         conn.close()
 
-def claim_pr(pr_id, remote_addr):
-    # Verify the PR exists
+def claim_pr(conn, pr_id, pr_url, username, remote_addr):
     # Tell Github we're claiming the PR
+    request = {
+        'assignee': username
+    }
+    if not merger.call_github(pr_url, request, 'PATCH'):
+        return jsonify({'result': 'failed to call Github'})
     # Update the local database
+    cursor = conn.cursor()
+    try:
+        cursor.execute("""UPDATE pull_request
+                          SET assignee_login=%(username)s, build_node=%(remote_addr)s
+                          WHERE id=%(id)s""", {'id': pr_id, 'username': username, 'remote_addr': remote_addr})
+        conn.commit()
+    finally:
+        cursor.close()
     # Return a value to let the node know that's okay
-    return False
+    return jsonify({'result': 'success'})

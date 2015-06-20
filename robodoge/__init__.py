@@ -120,7 +120,7 @@ class Robodoge:
             'base': self.base_branch.branch_name.split('/')[1]
         }
 
-    def call_github(self, url, request):
+    def call_github(self, url, request, method=None):
         """
         Raise a pull request against the given GitHub repository
         """
@@ -128,18 +128,20 @@ class Robodoge:
         buffer = BytesIO()
         c = pycurl.Curl()
         c.setopt(c.URL, url)
-        c.setopt(c.POST, 1)
         c.setopt(c.POSTFIELDS, json.dumps(request))
         c.setopt(c.HTTPHEADER, ["Content-Type: application/json; charset=utf-8"])
         c.setopt(c.USERNAME, self.private_token)
         c.setopt(c.PASSWORD, 'x-oauth-basic')
         c.setopt(c.WRITEDATA, buffer)
+        if method:
+            c.setopt(c.CUSTOMREQUEST, method)
+        else:
+            c.setopt(c.POST, 1)
         c.perform()
         status_code = c.getinfo(c.RESPONSE_CODE)
         c.close()
 
         if status_code < 200 or status_code> 299:
-            # print(buffer.getvalue().decode('UTF-8'))
             raise Error("Returned status from GitHub API was %d, expected 200-range status code" % status_code)
         return json.loads(buffer.getvalue().decode('UTF-8'))
 
@@ -166,7 +168,7 @@ class Robodoge:
             raise Exception("Expected PostgreSQL password to be provided in configuration file.")
 
         return psycopg2.connect("host=localhost dbname=%(db)s user=%(username)s password=%(password)s port=%(port)s" % pgsql_config)
-    
+
     def raise_pr(self, repo_name, title, body, head_branch_name):
         request = self.build_pr_request(title, body, head_branch_name)
         url = 'https://api.github.com/repos/%s/pulls' % repo_name
