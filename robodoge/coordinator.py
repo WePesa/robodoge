@@ -1,28 +1,16 @@
 #!/usr/bin/python3
 from flask import Flask, jsonify, request, make_response
-from flask.ext.httpauth import HTTPBasicAuth
 import psycopg2
 import psycopg2.extras
 from . import *
 
 app = Flask(__name__)
-auth = HTTPBasicAuth()
 config = load_configuration('/var/www/robodoge/config.yml')
 try:
     merger = Robodoge(config)
 except ConfigurationError as err:
     print(err.msg)
     sys.exit(1)
-
-@auth.get_password
-def get_password(username):
-    if username == 'robodoge':
-        return config['http_auth']['password']
-    return None
-
-@auth.error_handler
-def unauthorized():
-    return make_response(jsonify({'error': 'Unauthorized access'}), 401)
 
 @app.route('/automerge/api/v1.0/pr/', methods=['GET'])
 def get_prs():
@@ -57,7 +45,6 @@ def get_buildable_prs():
         conn.close()
 
 @app.route('/automerge/api/v1.0/pr/<int:pr_id>', methods=['GET'])
-@auth.login_required
 def get_pr(pr_id):
     conn = merger.get_connection()
     try:
@@ -73,7 +60,6 @@ def get_pr(pr_id):
         conn.close()
 
 @app.route('/automerge/api/v1.0/pr/<int:pr_id>', methods=['POST'])
-@auth.login_required
 def update_pr(pr_id):
     conn = merger.get_connection()
     try:
