@@ -1,5 +1,5 @@
 #!/usr/bin/python3
-from flask import Flask, jsonify, request
+from flask import Flask, jsonify, request, make_response
 from flask.ext.httpauth import HTTPBasicAuth
 import psycopg2
 import psycopg2.extras
@@ -16,7 +16,7 @@ except ConfigurationError as err:
 
 @auth.get_password
 def get_password(username):
-    if username == 'automerge':
+    if username == 'robodoge':
         return config['http_auth']['password']
     return None
 
@@ -56,8 +56,8 @@ def get_buildable_prs():
     finally:
         conn.close()
 
-@auth.login_required
 @app.route('/automerge/api/v1.0/pr/<int:pr_id>', methods=['GET'])
+@auth.login_required
 def get_pr(pr_id):
     conn = merger.get_connection()
     try:
@@ -72,8 +72,8 @@ def get_pr(pr_id):
     finally:
         conn.close()
 
-@auth.login_required
 @app.route('/automerge/api/v1.0/pr/<int:pr_id>', methods=['POST'])
+@auth.login_required
 def update_pr(pr_id):
     conn = merger.get_connection()
     try:
