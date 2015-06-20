@@ -2,6 +2,8 @@
 from flask import Flask, jsonify
 from flask.ext.httpauth import HTTPBasicAuth
 import robodoge
+import psycopg2
+import psycopg2.extras
 
 app = Flask(__name__)
 auth = HTTPBasicAuth()
@@ -22,29 +24,17 @@ def get_password(username):
 def unauthorized():
     return make_response(jsonify({'error': 'Unauthorized access'}), 401)
 
-tasks = [
-    {
-        'id': 1,
-        'title': u'Buy groceries',
-        'description': u'Milk, Cheese, Pizza, Fruit, Tylenol', 
-        'done': False
-    },
-    {
-        'id': 2,
-        'title': u'Learn Python',
-        'description': u'Need to find a good Python tutorial on the web', 
-        'done': False
-    }
-]
-
 @app.route('/automerge/api/v1.0/pr/', methods=['GET'])
 def get_prs():
     rows = None
     conn = merger.get_connection()
     try:
-        cursor = conn.cursor()
+        cursor = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
         try:
-            cursor.execute("SELECT * FROM pull_request WHERE project='dogecoin' and state!='closed'")
+            cursor.execute("""SELECT id,url,state,title,user_login,html_url,assignee_login,milestone_title,base_ref, build_node, s3_arn, test_node
+                              FROM pull_request
+                              WHERE project='dogecoin/dogecoin' and state!='closed'
+                              ORDER BY id DESC""")
             rows = cursor.fetchall()
         finally:
             cursor.close()
@@ -64,7 +54,7 @@ def update_pr(pr_id):
     try:
         cursor = conn.cursor()
         try:
-            cursor.execute("SELECT * FROM pull_request WHERE project='dogecoin' and state!='closed'")
+            cursor.execute("SELECT id,url,state,title,user_login,html_url,assignee_login,milestone_title,base_ref, build_node, s3_arn, test_node FROM pull_request WHERE project='dogecoin' and state!='closed'")
             rows = cur.fetchall()
         finally:
             cursor.close()

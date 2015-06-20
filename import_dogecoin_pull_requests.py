@@ -1,3 +1,4 @@
+#!/usr/bin/python3
 import psycopg2
 import pycurl
 import json
@@ -6,7 +7,7 @@ import robodoge
 import datetime
 import time
 
-def import_pull_requests(conn, page, private_token):
+def import_pull_requests(merger, conn, page, private_token):
     buffer = BytesIO()
     c = pycurl.Curl()
     c.setopt(c.URL, 'https://api.github.com/repos/dogecoin/dogecoin/pulls?state=open&page=%d' % page)
@@ -30,7 +31,7 @@ def import_pull_requests(conn, page, private_token):
     cursor = conn.cursor()
     try:
         for pr in response:
-            write_pr(cursor, pr, private_token)
+            write_pr(merger, cursor, pr, private_token)
             conn.commit()
     finally:
         cursor.close()
@@ -72,15 +73,12 @@ def write_pr(merger, cursor, pr, private_token):
     # Check record doesn't exist before trying to insert
     cursor.execute("SELECT id FROM pull_request WHERE id=%(id)s", {'id': pr['id']})
     if cursor.fetchone():
-       # TODO: Do a refresh instead of ignoring
-       print('Pull request %s already imported, skipping' % pr['id'])
-       return False
+       robodoge.update_pr(cursor, pr, 'dogecoin/dogecoin')
+    else:
+       robodoge.insert_pr(cursor, pr, 'dogecoin/dogecoin')
+       import_commits(merger, cursor, pr['id'], pr['commits_url'], private_token)
 
-    merger.write_pr(cursor, pr, 'dogecoin/dogecoin')
-
-    import_commits(merger, cursor, pr['id'], pr['commits_url'], private_token)
     time.sleep(1) # Badly rate limit requests
-    return True
 
 config = robodoge.load_configuration('config.yml')
 try:

@@ -75,7 +75,7 @@ def write_pr(merger, cursor, pr, private_token):
        print('Pull request %s already imported, skipping' % pr['id'])
        return False
 
-    merger.write_pr(cursor, pr, 'bitcoin/bitcoin')
+    merger.insert_pr(cursor, pr, 'bitcoin/bitcoin')
 
     import_commits(cursor, pr['id'], pr['commits_url'], private_token)
     time.sleep(1) # Badly rate limit requests

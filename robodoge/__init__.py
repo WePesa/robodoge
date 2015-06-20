@@ -233,9 +233,8 @@ def load_configuration(filename):
 
   return config
 
-
-def write_pr(cursor, pr, project):
-    """ Write a pull request and its commits into the database """
+def extract_pr_data(pr, project):
+    """ Extract data from a pull request for insertion/update into the database """
     data = {
        'id': pr['id'],
        'project': project,
@@ -245,8 +244,17 @@ def write_pr(cursor, pr, project):
        'title': pr['title'],
        'body': pr['body'].replace("\r\n", "\n"),
        'merge_commit_sha': pr['merge_commit_sha'],
-       'created_at': datetime.datetime.strptime(pr['created_at'], '%Y-%m-%dT%H:%M:%SZ')
+       'base_ref': pr['base']['ref'],
+       'created_at': datetime.datetime.strptime(pr['created_at'], '%Y-%m-%dT%H:%M:%SZ'),
     }
+    if pr['assignee']:
+        data['assignee_login'] = pr['assignee']['login']
+    else:
+        data['assignee_login'] = None
+    if pr['milestone']:
+        data['milestone_title'] = pr['milestone']['title']
+    else:
+        data['milestone_title'] = None
     if pr['merged_at']:
         data['merged_at'] = datetime.datetime.strptime(pr['merged_at'], '%Y-%m-%dT%H:%M:%SZ')
     else:
@@ -255,5 +263,19 @@ def write_pr(cursor, pr, project):
         data['user_login'] = pr['user']['login']
     else:
         data['user_login'] = None
-    cursor.execute("""INSERT INTO pull_request (id, project, url, html_url, state, title, user_login, body, created_at, merged_at, merge_commit_sha)
-         VALUES (%(id)s, %(project)s, %(url)s, %(html_url)s, %(state)s, %(title)s, %(user_login)s, %(body)s, %(created_at)s, %(merged_at)s, %(merge_commit_sha)s);""", data)
+
+    return data
+
+def insert_pr(cursor, pr, project):
+    """ Insert a pull request into the database """
+    data = extract_pr_data(pr, project)
+    cursor.execute("""INSERT INTO pull_request
+         (id, project, url, html_url, state, title, user_login, assignee_login, milestone_title, base_ref, body, created_at, merged_at, merge_commit_sha)
+         VALUES (%(id)s, %(project)s, %(url)s, %(html_url)s, %(state)s, %(title)s, %(user_login)s, %(assignee_login)s, %(milestone_title)s, %(base_ref)s, %(body)s, %(created_at)s, %(merged_at)s, %(merge_commit_sha)s);""", data)
+
+def update_pr(cursor, pr, project):
+    """ Update a pull request which already exists in the database """
+    data = extract_pr_data(pr, project)
+    cursor.execute("""UPDATE pull_request
+         SET state=%(state)s, title=%(title)s, assignee_login=%(assignee_login)s, milestone_title=%(milestone_title)s, merged_at=%(merged_at)s, merge_commit_sha=%(merge_commit_sha)s
+         WHERE id=%(id)s""", data)
