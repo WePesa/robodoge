@@ -7,13 +7,16 @@ import pygit2
 import pycurl
 import subprocess
 import yaml
+from flask import Flask
+
+coordinator = Flask(__name__)
 
 class Error(Exception):
     """Base class for exceptions in this module."""
     pass
 
 class BranchCollisionError(Error):
-    """ Error creating a branch becausea branch with the same name already exists """
+    """ Error creating a branch because a branch with the same name already exists """
     def __init__(self, msg):
         self.msg = msg
     def __str__(self):
@@ -59,6 +62,9 @@ class Robodoge:
             raise ConfigurationError('Missing "github" section from configuration')
         if not 'private_token' in config['github']:
             raise ConfigurationError('Missing "private_token" section in "github" section of configuration')
+
+        if not 'http_auth' in config:
+            raise ConfigurationError('Missing "http_auth" section from configuration')
 
         self.repo = pygit2.Repository(config['dogecoin_repo']['path'] + os.path.sep + '.git')
         self.config = config
@@ -159,7 +165,7 @@ class Robodoge:
         if 'password' not in pgsql_config:
             raise Exception("Expected PostgreSQL password to be provided in configuration file.")
 
-        return psycopg2.connect("host=localhost dbname=%(db)s user=%(username)s password=%(password)s" % pgsql_config)
+        return psycopg2.connect("host=localhost dbname=%(db)s user=%(username)s password=%(password)s port=%(port)s" % pgsql_config)
     
     def raise_pr(self, repo_name, title, body, head_branch_name):
         request = self.build_pr_request(title, body, head_branch_name)

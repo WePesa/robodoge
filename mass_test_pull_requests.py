@@ -133,4 +133,4 @@ try:
 finally:
     conn.close()
 
-merger.repo.checkout(safe_branch)
+merger.repo.checkout(merger.safe_branch)

@@ -6,10 +6,10 @@ import robodoge
 import datetime
 import time
 
-def import_pull_requests(merger, conn, page, private_token):
+def import_pull_requests(conn, page, private_token):
     buffer = BytesIO()
     c = pycurl.Curl()
-    c.setopt(c.URL, 'https://api.github.com/repos/bitcoin/bitcoin/pulls?state=closed&page=%d' % page)
+    c.setopt(c.URL, 'https://api.github.com/repos/dogecoin/dogecoin/pulls?state=open&page=%d' % page)
     c.setopt(c.USERNAME, private_token)
     c.setopt(c.PASSWORD, 'x-oauth-basic')
     c.setopt(c.WRITEDATA, buffer)
@@ -22,7 +22,7 @@ def import_pull_requests(merger, conn, page, private_token):
     # TODO: Handle rate limiting without throwing an exception
 
     response = json.loads(buffer.getvalue().decode('UTF-8'))
-    print('Fetched %d pull requests from https://api.github.com/repos/bitcoin/bitcoin/pulls?state=closed&page=%d' % (len(response), page))
+    print('Fetched %d pull requests from https://api.github.com/repos/dogecoin/dogecoin/pulls?state=open&page=%d' % (len(response), page))
     if len(response) == 0:
         # No more data
         return False
@@ -30,7 +30,7 @@ def import_pull_requests(merger, conn, page, private_token):
     cursor = conn.cursor()
     try:
         for pr in response:
-            write_pr(merger, cursor, pr, private_token)
+            write_pr(cursor, pr, private_token)
             conn.commit()
     finally:
         cursor.close()
@@ -72,12 +72,13 @@ def write_pr(merger, cursor, pr, private_token):
     # Check record doesn't exist before trying to insert
     cursor.execute("SELECT id FROM pull_request WHERE id=%(id)s", {'id': pr['id']})
     if cursor.fetchone():
+       # TODO: Do a refresh instead of ignoring
        print('Pull request %s already imported, skipping' % pr['id'])
        return False
 
-    merger.write_pr(cursor, pr, 'bitcoin/bitcoin')
+    merger.write_pr(cursor, pr, 'dogecoin/dogecoin')
 
-    import_commits(cursor, pr['id'], pr['commits_url'], private_token)
+    import_commits(merger, cursor, pr['id'], pr['commits_url'], private_token)
     time.sleep(1) # Badly rate limit requests
     return True
 

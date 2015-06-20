@@ -3,6 +3,7 @@ pgsql:
   username: dogecoin_merge
   password: test
   db: dogecoin_merge
+  port: 5433
 dogecoin_repo:
   path: /home/jrn/dogecoin
   branch: upstream/1.9-dev
@@ -11,3 +12,5 @@ dogecoin_repo:
     email: jrn@jrn.me.uk
 github:
   private_token: topsecret
+http_auth:
+  password: topsecret
