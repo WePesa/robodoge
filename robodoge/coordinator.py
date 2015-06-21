@@ -111,12 +111,17 @@ def claim_pr(conn, pr_id, pr_url, username, remote_addr):
     try:
         cursor.execute("""UPDATE pull_request
                           SET assignee_login=%(username)s, build_node=%(remote_addr)s, build_started=NOW()
-                          WHERE id=%(id)s""", {'id': pr_id, 'username': username, 'remote_addr': remote_addr})
+                          WHERE id=%(id)s AND build_node IS NULL""",
+                       {'id': pr_id, 'username': username, 'remote_addr': remote_addr})
+        rowcount = cursor.rowcount
         conn.commit()
     finally:
         cursor.close()
-    # Return a value to let the node know that's okay
-    return jsonify({'result': 'ok'})
+    if rowcount > 0:
+        # Return a value to let the node know that's okay
+        return jsonify({'result': 'ok'})
+    else:
+        return jsonify({'result': 'Build already taken'})
 
 def mark_build_failed(conn, pr_id):
     try:
