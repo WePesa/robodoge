@@ -18,3 +18,6 @@ http_auth:
   password: topsecret
 coordinator:
   url: https://example.org/
+s3:
+  bucket: mybucket
+  client_path: robodoge
