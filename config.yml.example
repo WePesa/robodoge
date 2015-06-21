@@ -16,3 +16,5 @@ github:
 http_auth:
   user: robodoge
   password: topsecret
+coordinator:
+  url: https://example.org/
