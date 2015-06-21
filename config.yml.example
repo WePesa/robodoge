@@ -8,9 +8,11 @@ dogecoin_repo:
   path: /home/jrn/dogecoin
   branch: upstream/1.9-dev
   committer:
+    username: rnicoll
     name: Ross Nicoll
     email: jrn@jrn.me.uk
 github:
   private_token: topsecret
 http_auth:
+  user: robodoge
   password: topsecret
