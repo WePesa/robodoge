@@ -280,5 +280,5 @@ def update_pr(cursor, pr, project):
     """ Update a pull request which already exists in the database """
     data = extract_pr_data(pr, project)
     cursor.execute("""UPDATE pull_request
-         SET state=%(state)s, title=%(title)s, assignee_login=%(assignee_login)s, milestone_title=%(milestone_title)s, merged_at=%(merged_at)s, merge_commit_sha=%(merge_commit_sha)s
+         SET number=%(number)s, state=%(state)s, title=%(title)s, assignee_login=%(assignee_login)s, milestone_title=%(milestone_title)s, merged_at=%(merged_at)s, merge_commit_sha=%(merge_commit_sha)s
          WHERE id=%(id)s""", data)

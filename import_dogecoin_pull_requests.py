@@ -4,13 +4,12 @@ import pycurl
 import json
 from io import BytesIO
 import robodoge
-import datetime
 import time
 
 def import_pull_requests(merger, conn, page, private_token):
     buffer = BytesIO()
     c = pycurl.Curl()
-    c.setopt(c.URL, 'https://api.github.com/repos/dogecoin/dogecoin/pulls?state=open&page=%d' % page)
+    c.setopt(c.URL, 'https://api.github.com/repos/dogecoin/dogecoin/pulls?page=%d' % page)
     c.setopt(c.USERNAME, private_token)
     c.setopt(c.PASSWORD, 'x-oauth-basic')
     c.setopt(c.WRITEDATA, buffer)
@@ -23,7 +22,7 @@ def import_pull_requests(merger, conn, page, private_token):
     # TODO: Handle rate limiting without throwing an exception
 
     response = json.loads(buffer.getvalue().decode('UTF-8'))
-    print('Fetched %d pull requests from https://api.github.com/repos/dogecoin/dogecoin/pulls?state=open&page=%d' % (len(response), page))
+    print('Fetched %d pull requests from https://api.github.com/repos/dogecoin/dogecoin/pulls?page=%d' % (len(response), page))
     if len(response) == 0:
         # No more data
         return False
@@ -77,8 +76,7 @@ def write_pr(merger, cursor, pr, private_token):
     else:
        robodoge.insert_pr(cursor, pr, 'dogecoin/dogecoin')
        import_commits(merger, cursor, pr['id'], pr['commits_url'], private_token)
-
-    time.sleep(1) # Badly rate limit requests
+       time.sleep(1) # Badly rate limit requests
 
 config = robodoge.load_configuration('config.yml')
 try:
