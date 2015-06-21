@@ -120,6 +120,7 @@ while pr:
     bucket = s3.get_bucket(config['s3']['bucket'])
     daemon_key = Key(bucket)
     daemon_key.key = config['s3']['client_path'] + '/' + str(pr_number) + '/dogecoind'
+    print('Uploading ' + config['dogecoin_repo']['path'] + '/src/dogecoind' + " to " + config['s3']['client_path'] + '/' + str(pr_number) + '/dogecoind')
     daemon_key.set_contents_from_filename(config['dogecoin_repo']['path'] + '/src/dogecoind')
     daemon_key.close()
 
