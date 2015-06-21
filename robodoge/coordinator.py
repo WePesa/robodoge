@@ -82,6 +82,18 @@ def update_pr(pr_id):
 
         if request.json['operation'] == 'claim_build':
             return claim_pr(conn, pr_id, pr_url, 'rnicoll', request.remote_addr)
+        elif request.json['operation'] == 'build_success':
+            if not 's3_arn' in request.json:
+                return jsonify({'result': 'No S3 ARN specified'})
+            return mark_build_success(conn, pr_id, request.json['s3_arn'])
+        elif request.json['operation'] == 'build_failed':
+            return mark_build_failed(conn, pr_id)
+        elif request.json['operation'] == 'test_pr':
+            return test_pr(conn, pr_id, pr_url, request.remote_addr)
+        elif request.json['operation'] == 'test_success':
+            return mark_test_success(conn, pr_id)
+        elif request.json['operation'] == 'test_failed':
+            return mark_test_failed(conn, pr_id)
         else:
             return jsonify({'result': 'Invalid operation specified'})
     finally:
@@ -98,10 +110,67 @@ def claim_pr(conn, pr_id, pr_url, username, remote_addr):
     cursor = conn.cursor()
     try:
         cursor.execute("""UPDATE pull_request
-                          SET assignee_login=%(username)s, build_node=%(remote_addr)s
+                          SET assignee_login=%(username)s, build_node=%(remote_addr)s, build_started=NOW()
                           WHERE id=%(id)s""", {'id': pr_id, 'username': username, 'remote_addr': remote_addr})
         conn.commit()
     finally:
         cursor.close()
     # Return a value to let the node know that's okay
-    return jsonify({'result': 'success'})
+    return jsonify({'result': 'ok'})
+
+def mark_build_failed(conn, pr_id):
+    try:
+        cursor.execute("""UPDATE pull_request
+                          SET build_failed=NOW()
+                          WHERE id=%(id)s""", {'id': pr_id})
+        conn.commit()
+    finally:
+        cursor.close()
+    # Return a value to let the node know that's okay
+    return jsonify({'result': 'ok'})
+
+def mark_build_success(conn, pr_id, s3_arn):
+    try:
+        cursor.execute("""UPDATE pull_request
+                          SET build_succeeded=NOW(), s3_arn=%(s3_arn)s
+                          WHERE id=%(id)s""", {'id': pr_id, 's3_arn': s3_arn})
+        conn.commit()
+    finally:
+        cursor.close()
+    # Return a value to let the node know that's okay
+    return jsonify({'result': 'ok'})
+
+def test_pr(conn, pr_id, pr_url, remote_addr):
+    # Update the local database
+    cursor = conn.cursor()
+    try:
+        cursor.execute("""UPDATE pull_request
+                          SET test_node=%(remote_addr)s, test_started=NOW()
+                          WHERE id=%(id)s""", {'id': pr_id, 'remote_addr': remote_addr})
+        conn.commit()
+    finally:
+        cursor.close()
+    # Return a value to let the node know that's okay
+    return jsonify({'result': 'ok'})
+
+def mark_test_failed(conn, pr_id):
+    try:
+        cursor.execute("""UPDATE pull_request
+                          SET test_failed=NOW()
+                          WHERE id=%(id)s""", {'id': pr_id})
+        conn.commit()
+    finally:
+        cursor.close()
+    # Return a value to let the node know that's okay
+    return jsonify({'result': 'ok'})
+
+def mark_test_success(conn, pr_id):
+    try:
+        cursor.execute("""UPDATE pull_request
+                          SET test_succeeded=NOW()s
+                          WHERE id=%(id)s""", {'id': pr_id})
+        conn.commit()
+    finally:
+        cursor.close()
+    # Return a value to let the node know that's okay
+    return jsonify({'result': 'ok'})
